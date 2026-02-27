@@ -1,0 +1,29 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Dependencies — install with: npm install
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Downloaded zips (don't commit these)
+*.zip
+
+# Editor / IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Dev notes (private)
+DEV-NOTES.md
+
+# Config (user-specific, stored in home dir anyway)
+# ~/.figma-ds-cli/config.json — NOT committed, it's in homedir
+
+# Temp files
+*.tmp
