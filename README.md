@@ -1,0 +1,1 @@
+# figma-cli-g
