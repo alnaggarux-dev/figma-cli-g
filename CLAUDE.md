@@ -1,4 +1,4 @@
-# figma-ds-cli
+# Figma-cli-g
 
 CLI that controls Figma Desktop directly. No API key needed.
 

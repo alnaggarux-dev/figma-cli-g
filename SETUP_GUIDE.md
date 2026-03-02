@@ -1,6 +1,6 @@
 # Windows Setup Guide
 
-Complete setup guide for **figma-ds-cli** on Windows.
+Complete setup guide for **Figma-cli-g** on Windows.
 
 ---
 
@@ -203,5 +203,7 @@ node src/index.js unpatch   # Restores original Figma
 
 To remove config:
 ```powershell
-Remove-Item "$env:USERPROFILE\.figma-ds-cli" -Recurse -Force
+Remove-Item "$env:USERPROFILE\.Figma-cli-g" -Recurse -Force
 ```
+**For more help contact with me:**
+[LinkedIn: Alnaggar UX](https://www.linkedin.com/in/alnaggar-ux/)

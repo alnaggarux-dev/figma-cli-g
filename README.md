@@ -1,119 +1,169 @@
-# figma-ds-cli
+# Figma-cli-g
 
 <p align="center">
-  <a href="https://intodesignsystems.com"><img src="https://img.shields.io/badge/Into_Design_Systems-intodesignsystems.com-ff6b35" alt="Into Design Systems"></a>
+  <a href="https://www.linkedin.com/in/alnaggar-ux/"><img src="https://img.shields.io/badge/Contact-LinkedIn-blue" alt="LinkedIn"></a>
   <img src="https://img.shields.io/badge/Figma-Desktop-purple" alt="Figma Desktop">
   <img src="https://img.shields.io/badge/No_API_Key-Required-green" alt="No API Key">
-  <img src="https://img.shields.io/badge/Claude_Code-Ready-blue" alt="Claude Code">
+  <img src="https://img.shields.io/badge/AI_Ready-Universal-blue" alt="AI Ready">
 </p>
 
 <p align="center">
-  <b>Control Figma Desktop with Claude Code.</b><br>
-  Full read/write access. No API key required.<br>
-  Just talk to Claude about your designs.
+  <b>Control Figma Desktop from your terminal or any AI-powered IDE/CLI.</b><br>
+  Full local read/write access to Figma Desktop. No Figma API key required.<br>
+  Use it directly in the terminal or let your AI assistant drive the commands for you.
 </p>
 
 ```
-  ███████╗██╗ ██████╗ ███╗   ███╗ █████╗       ██████╗ ███████╗       ██████╗██╗     ██╗
-  ██╔════╝██║██╔════╝ ████╗ ████║██╔══██╗      ██╔══██╗██╔════╝      ██╔════╝██║     ██║
-  █████╗  ██║██║  ███╗██╔████╔██║███████║█████╗██║  ██║███████╗█████╗██║     ██║     ██║
-  ██╔══╝  ██║██║   ██║██║╚██╔╝██║██╔══██║╚════╝██║  ██║╚════██║╚════╝██║     ██║     ██║
-  ██║     ██║╚██████╔╝██║ ╚═╝ ██║██║  ██║      ██████╔╝███████║      ╚██████╗███████╗██║
-  ╚═╝     ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝      ╚═════╝ ╚══════╝       ╚═════╝╚══════╝╚═╝
+  ███████╗██╗ ██████╗ ███╗   ███╗ █████╗       ██████╗██╗     ██╗      ██████╗
+  ██╔════╝██║██╔════╝ ████╗ ████║██╔══██╗      ██╔════╝██║     ██║     ██╔════╝
+  █████╗  ██║██║  ███╗██╔████╔██║███████║█████╗██║     ██║     ██║     ██║  ███╗
+  ██╔══╝  ██║██║   ██║██║╚██╔╝██║██╔══██║╚════╝██║     ██║     ██║     ██║   ██║
+  ██║     ██║╚██████╔╝██║ ╚═╝ ██║██║  ██║      ╚██████╗███████╗██║     ╚██████╔╝
+  ╚═╝     ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝       ╚═════╝╚══════╝╚═╝      ╚═════╝
 ```
 
 ## What is This?
 
-A CLI that connects directly to Figma Desktop and gives you complete control:
+**Figma-cli-g** is a cross‑platform CLI that connects directly to **Figma Desktop** (via the Chrome DevTools / WebSocket protocol) and gives you complete local control over your files:
 
-- **Design Tokens** — Create variables, collections, modes (Light/Dark), bind to nodes
-- **Create Anything** — Frames, text, shapes, icons (150k+ from Iconify), components
-- **Team Libraries** — Import and use components, styles, variables from any library
-- **Analyze Designs** — Colors, typography, spacing, find repeated patterns
-- **Lint & Accessibility** — Contrast checker, touch targets, design rules
+- **Design Tokens** — Create variables, collections, and modes (Light/Dark, etc.), then bind them to nodes
+- **Create Anything** — Frames, text, shapes, icons (150k+ from Iconify), components, and variants
+- **Team Libraries** — Use variables, components, styles, and tokens from Figma libraries
+- **Analyze Designs** — Inspect colors, typography, spacing, and repeated patterns
+- **Lint & Accessibility** — Contrast checks, touch targets, and design rules
 - **Export** — PNG, SVG, JSX, Storybook stories, CSS variables, Tailwind config
-- **Batch Operations** — Rename layers, find/replace text, create 100 variables at once
-- **Works with Claude Code** — Just ask in natural language, Claude knows all commands
+- **Batch Operations** — Rename layers, find/replace text, or generate hundreds of variables at once
+- **AI-Friendly** — Designed to be driven by AI tools (Claude Code, Cursor, Gemini CLI, Copilot, Antigravity, etc.) or by you directly in the terminal
 
 ## Why This CLI?
 
-This project includes a `CLAUDE.md` file that Claude reads automatically. It contains:
+This fork focuses on **Windows support** and **universal AI integration** while keeping macOS/Linux fully supported.
 
-- All available commands and their syntax
-- Best practices (e.g., "use `render` for text-heavy designs")
-- Common requests mapped to solutions
+The project ships with two instruction files that AI tools can read automatically:
 
-**Want to teach Claude new tricks?** Just update `CLAUDE.md`. No code changes needed.
+- `CLAUDE.md` — optimized for Claude Code and similar AI IDEs
+- `AGENT.md` — a vendor‑neutral version for tools like Antigravity, Gemini CLI, Cursor, Copilot, etc.
 
-**Example:** You type "Create Tailwind colors" → Claude already knows to run `node src/index.js tokens tailwind` because it's documented in `CLAUDE.md`.
+These contain:
+
+- All available high‑level commands and their syntax
+- Best practices (for example: *“use `render` instead of raw eval for text‑heavy layouts”*)
+- Mappings from common user phrases to concrete CLI commands
+
+**Want to teach your AI assistant new tricks?** Update `CLAUDE.md` or `AGENT.md` (or mirror them into your own tool‑specific instruction file). No code changes are required.
+
+**Example:** You say to your AI: “Create Tailwind colors for this file” → the assistant knows to run `node src/index.js tokens tailwind` because that mapping lives in the instruction files.
 
 ---
 
 ## What You Need
 
 - **Figma Desktop** (free account works)
-- **Claude Code** ([get it here](https://www.anthropic.com/claude-code))
-- **Node.js** (v18 or later)
+- **Node.js** v18 or later
+- **Optional – AI tooling**:
+  - **Claude Code** ([download](https://www.anthropic.com/claude-code))
+  - **Cursor**, **Gemini CLI**, **GitHub Copilot**, **Antigravity**, or any IDE/CLI that can read project files and run terminal commands
+
+You can always use `figma-cli-g` directly from the terminal even without an AI assistant.
 
 ---
 
-## Setup
+## Setup & Installation
 
+**Please see [SETUP_GUIDE.md](./SETUP_GUIDE.md) for full installation instructions for this fork.**
+
+The guide covers:
+
+- Windows (PowerShell / CMD) usage and common permission issues
+- macOS / Linux setup notes
+- Yolo Mode (recommended auto‑connect to Figma Desktop)
+- Safe Mode (plugin‑based connection for restricted or locked‑down environments)
+
+---
+
+## 🛠 What's New in v1.2.0 (The Windows & Universal AI Update)
+
+This fork has been significantly modified from the original `figma-use`‑based CLI to:
+
+- Support **Windows** natively (no WSL required)
+- Use **`figma-cli-g`** as the primary entrypoint (`npx` not required)
+- Work with **any AI assistant** that understands project files and can run terminal commands
+- Normalize paths and temp‑file handling across platforms
+
+See [WHAT_WE_DID.md](./WHAT_WE_DID.md) for a detailed changelog of what changed compared to the upstream project.
+
+---
 ### 1. Clone & Open
 
 ```bash
 git clone https://github.com/silships/figma-cli.git
 cd figma-cli
-claude
 ```
 
-**IMPORTANT:** Start Claude Code from the figma-cli folder so it can read the instructions.
+Then:
+
+- Open the folder in your preferred AI IDE (Claude Code, Cursor, etc.), **or**
+- Stay in the terminal and use `node src/index.js` / `figma-cli-g` directly
+
+**IMPORTANT:** If you use an AI IDE, open it from the project root so it can read `CLAUDE.md`, `AGENT.md`, and the docs.
 
 ### 2. Connect
 
-Just say:
-```
-Connect to Figma
+With an AI assistant, you can simply say something like:
+
+> “Connect to Figma.”
+
+The assistant will choose and run one of the connection modes:
+
+- **Yolo Mode (Recommended)** — Fully automatic, uses a local debug port
+- **Safe Mode** — Uses a Figma plugin, ideal for corporate / restricted environments
+
+Or run it yourself from the terminal:
+
+```bash
+node src/index.js connect            # Yolo Mode
+node src/index.js connect --safe     # Safe Mode
 ```
 
-Claude asks which connection mode:
-- **Yolo Mode (Recommended)** — Fully automatic, secure random port
-- **Safe Mode** — For corporate/restricted environments
-
-Done! Now just talk to Claude about your designs.
+Once connected, you can either type commands or just describe what you want to your AI assistant.
 
 ---
 
 ## Using It
 
-Once connected, just talk to Claude:
+Once connected, you can either:
 
-> "Add shadcn colors to my project"
+- **Run commands directly** in your terminal, or
+- **Talk to your AI assistant**, which will translate your requests into the correct commands
 
-> "Add a card component"
+Examples of things you can say:
 
-> "Check accessibility"
+> “Add shadcn colors to my project.”  
+> “Create a card component with a title, description, and CTA button.”  
+> “Check accessibility for this page.”  
+> “Export all variables as CSS custom properties.”
 
-> "Export variables as CSS"
+The included `CLAUDE.md` and `AGENT.md` files teach AI tools the key workflows automatically, so they rarely need the full manual.
 
-The included `CLAUDE.md` teaches Claude all commands automatically. No manual required.
-
-**Safe Mode users:** Start the FigCli plugin each time you open Figma.
+**Safe Mode users:** Remember to start the FigCli plugin each time you open Figma (Plugins → Development → FigCli).
 
 ## Two Connection Modes
 
 ### 🚀 Yolo Mode (Recommended)
 
-**What it does:** Patches Figma once to enable a debug port, then connects directly.
+**What it does:** Patches Figma Desktop once to enable a local debug port, then connects directly over WebSocket.
 
 **Pros:**
-- Fully automatic (no manual steps after setup)
+
+- Fully automatic after the first run
 - Slightly faster execution
-- Secure: random port (9222-9322) per session, localhost only
+- Secure: random local port (9222–9322) per session, bound to `localhost`
 
 **Cons:**
-- Requires one-time Figma patch
-- Needs Full Disk Access on macOS (one-time)
+
+- Requires a one‑time patch of the Figma Desktop app
+- On macOS: needs Full Disk Access for the terminal app (one‑time)
+- On Windows: first run should be from an **elevated** (Run as Administrator) terminal
 
 ```
 ┌─────────────┐      WebSocket (CDP)      ┌─────────────┐
@@ -129,15 +179,17 @@ node src/index.js connect
 
 ### 🔒 Safe Mode — For Restricted Environments
 
-**What it does:** Uses a Figma plugin to communicate. No Figma modification needed.
+**What it does:** Uses a small Figma plugin as a bridge between the CLI and Figma. No binary patching or app modification is required.
 
 **Pros:**
-- No patching, no app modification
-- Works everywhere (corporate, personal, any environment)
-- No Full Disk Access needed
+
+- No patching of the Figma app
+- Works well in corporate / locked‑down environments
+- No Full Disk Access or admin rights required on most systems
 
 **Cons:**
-- Start plugin manually each session (2 clicks)
+
+- You need to start the plugin manually each session (two quick clicks)
 
 ```
 ┌─────────────┐     WebSocket     ┌─────────────┐     Plugin API     ┌─────────────┐
@@ -403,20 +455,20 @@ Run Command Prompt or PowerShell as Administrator, then run `node src/index.js c
 
 ## Author
 
-**[Sil Bormüller](https://www.linkedin.com/in/silbormueller/)** — [intodesignsystems.com](https://intodesignsystems.com)
+**[Alnaggar UX](https://www.linkedin.com/in/alnaggar-ux/)** — for more help contact me
 
 ## Powered By
 
-This CLI is built on top of **[figma-use](https://github.com/dannote/figma-use)** by [dannote](https://github.com/dannote) — an excellent Figma CLI with JSX rendering, XPath queries, design linting, and much more.
+This fork is based on **[silships/figma-cli](https://github.com/silships/figma-cli)** by [Sil Bormüller](https://github.com/silships), which in turn is built on top of **[figma-use](https://github.com/dannote/figma-use)** by [dannote](https://github.com/dannote) — an excellent Figma CLI with JSX rendering, XPath queries, design linting, and much more.
 
-We use figma-use for:
+We rely on `figma-use` for:
 - JSX rendering (`render` command)
 - Node operations (`node tree`, `node to-component`, etc.)
 - Design analysis (`analyze colors`, `analyze typography`)
 - Design linting (`lint`)
-- And many other features
+- Many other core capabilities
 
-**Big thanks to dannote for figma-use!**
+**Huge thanks to both [silships](https://github.com/silships) for `figma-cli` and [dannote](https://github.com/dannote) for `figma-use`.**
 
 ## License
 

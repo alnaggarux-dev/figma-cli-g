@@ -150,13 +150,13 @@ const sessions = page.children.filter(n => n.name.startsWith('session-'));
 
 for (const session of sessions) {
   // Use figma-use export command
-  // figma-ds-cli raw export "SESSION_ID" --scale 2 --suffix "_dark"
+  // figma-cli-g raw export "SESSION_ID" --scale 2 --suffix "_dark"
 }
 ```
 
 Via CLI:
 ```bash
-figma-ds-cli raw export "1:90" --scale 2 --suffix "_dark"
+figma-cli-g raw export "1:90" --scale 2 --suffix "_dark"
 ```
 
 ---
@@ -191,14 +191,14 @@ selected.map(n => n.name + ' (' + n.id + ')').join(', ');
 
 Sometimes eval commands execute but return nothing. The code still runs. Verify by:
 
-1. Query the nodes after: `figma-ds-cli raw query "//GROUP"`
+1. Query the nodes after: `figma-cli-g raw query "//GROUP"`
 2. Check properties changed: look at sizes, positions, names
 
 ### Finding Node IDs
 
 ```bash
 # Query returns IDs in format: [TYPE] "name" (ID) dimensions
-figma-ds-cli raw query "//FRAME"
+figma-cli-g raw query "//FRAME"
 # Output: [FRAME] "session-1" (1:90) 1920×1080
 ```
 

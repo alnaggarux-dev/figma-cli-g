@@ -5,8 +5,8 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { execSync, spawn } from 'child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
+import { dirname, join, isAbsolute } from 'path';
 import { createInterface } from 'readline';
 import { homedir, platform, tmpdir } from 'os';
 import { createServer } from 'http';
@@ -24,12 +24,12 @@ function isDaemonRunning() {
     if (IS_WINDOWS) {
       // PowerShell is always available on Windows 10+ — no curl needed
       const result = execSync(
-        `powershell -NoProfile -Command "try { (Invoke-WebRequest -Uri 'http://localhost:${DAEMON_PORT}/health' -UseBasicParsing -TimeoutSec 1).StatusCode } catch { 0 }"`,
+        `powershell -NoProfile -Command "try { (Invoke-WebRequest -Uri 'http://127.0.0.1:${DAEMON_PORT}/health' -UseBasicParsing -TimeoutSec 1).StatusCode } catch { 0 }"`,
         { encoding: 'utf8', stdio: 'pipe', timeout: 2500 }
       );
       return result.trim() === '200';
     } else {
-      const response = execSync(`curl -s -o /dev/null -w "%{http_code}" http://localhost:${DAEMON_PORT}/health`, {
+      const response = execSync(`curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${DAEMON_PORT}/health`, {
         encoding: 'utf8',
         stdio: 'pipe',
         timeout: 1000
@@ -43,7 +43,7 @@ function isDaemonRunning() {
 
 // Send command to daemon (uses native fetch in Node 18+)
 async function daemonExec(action, data = {}) {
-  const response = await fetch(`http://localhost:${DAEMON_PORT}/exec`, {
+  const response = await fetch(`http://127.0.0.1:${DAEMON_PORT}/exec`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, ...data }),
@@ -99,6 +99,7 @@ async function fastRender(jsx) {
     try {
       return await daemonExec('render', { jsx });
     } catch (e) {
+      console.log(chalk.yellow(`  (Daemon render failed: ${e.message})`));
       // Continue to fallbacks
     }
   }
@@ -108,20 +109,20 @@ async function fastRender(jsx) {
     const client = await getFigmaClient();
     return await client.render(jsx);
   } catch (e) {
-    // Fall back to npx figma-use
+    // Last resort fallback
+    console.log(chalk.gray('  (Bridge/Direct failed, trying npx figma-use...)'));
     const { FigmaClient } = await import('./figma-client.js');
     const tempClient = new FigmaClient();
     const code = tempClient.parseJSX(jsx);
 
-    const tempFile = '/tmp/figma-render-' + Date.now() + '.js';
+    const tempFile = join(tmpdir(), 'figma-render-' + Date.now() + '.js');
     writeFileSync(tempFile, code);
     try {
-      const output = execSync(`npx figma-use eval "$(cat ${tempFile})"`, {
+      const output = execSync(`npx figma-use eval --file "${tempFile}"`, {
         encoding: 'utf8',
         stdio: 'pipe',
         timeout: 30000
       });
-      unlinkSync(tempFile);
       try {
         return JSON.parse(output.trim());
       } catch {
@@ -145,11 +146,23 @@ function startDaemon(forceRestart = false, mode = 'auto') {
   }
 
   const daemonScript = join(dirname(fileURLToPath(import.meta.url)), 'daemon.js');
-  const child = spawn('node', [daemonScript], {
-    detached: true,
-    stdio: 'ignore',
-    env: { ...process.env, DAEMON_PORT: String(DAEMON_PORT), DAEMON_MODE: mode }
-  });
+
+  let child;
+  if (IS_WINDOWS) {
+    // Windows: use 'start' to properly detach and keep alive
+    child = spawn('cmd.exe', ['/c', 'start', '/b', 'node', daemonScript], {
+      detached: true,
+      stdio: 'ignore',
+      shell: true,
+      env: { ...process.env, DAEMON_PORT: String(DAEMON_PORT), DAEMON_MODE: mode }
+    });
+  } else {
+    child = spawn('node', [daemonScript], {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env, DAEMON_PORT: String(DAEMON_PORT), DAEMON_MODE: mode }
+    });
+  }
   child.unref();
 
   // Save PID
@@ -159,22 +172,21 @@ function startDaemon(forceRestart = false, mode = 'auto') {
 
 // Stop daemon
 function stopDaemon() {
+  if (IS_WINDOWS) {
+    // Kill by port first to be safe
+    try {
+      execSync(`powershell -Command "Get-NetTCPConnection -LocalPort ${DAEMON_PORT} -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }"`, { stdio: 'ignore' });
+    } catch (e) { }
+    // Kill by name as second fallback
+    try { execSync(`taskkill /F /IM node.exe /FI "WINDOWTITLE eq figma-cli-daemon*"`, { stdio: 'ignore' }); } catch { }
+  }
+
   try {
     if (existsSync(DAEMON_PID_FILE)) {
       const pid = readFileSync(DAEMON_PID_FILE, 'utf8').trim();
-      try {
-        process.kill(parseInt(pid), 'SIGTERM');
-      } catch { }
-      unlinkSync(DAEMON_PID_FILE);
+      try { process.kill(parseInt(pid), 'SIGTERM'); } catch { }
+      try { unlinkSync(DAEMON_PID_FILE); } catch { }
     }
-    // Also try to kill by port (cross-platform)
-    try {
-      if (IS_WINDOWS) {
-        execSync(`for /f "tokens=5" %a in ('netstat -aon ^| find ":${DAEMON_PORT}"') do taskkill /F /PID %a`, { stdio: 'pipe', shell: true });
-      } else {
-        execSync(`lsof -ti:${DAEMON_PORT} | xargs kill -9 2>/dev/null || true`, { stdio: 'pipe' });
-      }
-    } catch { /* ignore */ }
   } catch { }
 }
 
@@ -237,7 +249,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
 
-const CONFIG_DIR = join(homedir(), '.figma-ds-cli');
+const CONFIG_DIR = join(homedir(), '.figma-cli-g');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
 const program = new Command();
@@ -339,8 +351,9 @@ function figmaEvalSync(code) {
   const tempFile = join(tmpdir(), `figma-eval-${Date.now()}.mjs`);
   const resultFile = join(tmpdir(), `figma-result-${Date.now()}.json`);
 
+  const clientPath = pathToFileURL(join(process.cwd(), 'src/figma-client.js')).href;
   const script = `
-    import { FigmaClient } from '${join(process.cwd(), 'src/figma-client.js').replace(/\\/g, '/')}';
+    import { FigmaClient } from '${clientPath}';
     import { writeFileSync } from 'fs';
 
     (async () => {
@@ -397,7 +410,7 @@ function figmaUse(args, options = {}) {
   if (args === 'status' || args.startsWith('status')) {
     try {
       const port = getCdpPort();
-      const result = execSync(`curl -s http://localhost:${port}/json`, { encoding: 'utf8', stdio: 'pipe' });
+      const result = execSync(`curl -s http://127.0.0.1:${port}/json`, { encoding: 'utf8', stdio: 'pipe' });
       const pages = JSON.parse(result);
       const figmaPage = pages.find(p => p.url?.includes('figma.com/design') || p.url?.includes('figma.com/file'));
       if (figmaPage) {
@@ -470,26 +483,16 @@ function figmaUse(args, options = {}) {
 // Helper: Check connection
 async function checkConnection() {
   // First check daemon (works for both CDP and Plugin modes)
-  try {
-    let health;
-    if (IS_WINDOWS) {
-      health = execSync(`powershell -Command "(Invoke-WebRequest -Uri 'http://127.0.0.1:${DAEMON_PORT}/health' -UseBasicParsing).Content"`, { encoding: 'utf8', timeout: 2000 });
-    } else {
-      health = execSync(`curl -s http://127.0.0.1:${DAEMON_PORT}/health`, { encoding: 'utf8', timeout: 2000 });
-    }
-    const data = JSON.parse(health);
-    if (data.status === 'ok' && (data.plugin || data.cdp)) {
-      return true;
-    }
-  } catch { }
+  if (isDaemonRunning()) {
+    return true;
+  }
 
   // Fallback: check CDP directly
   const connected = await FigmaClient.isConnected();
   if (!connected) {
     console.log(chalk.red('\n✗ Not connected to Figma\n'));
     console.log(chalk.white('  Make sure Figma is running:'));
-    console.log(chalk.cyan('  figma-ds-cli connect') + chalk.gray(' (Yolo Mode)'));
-    console.log(chalk.cyan('  figma-ds-cli connect --safe') + chalk.gray(' (Safe Mode)\n'));
+    console.log(chalk.cyan('  figma-ds-cli start') + chalk.gray(' (Check connection)\n'));
     process.exit(1);
   }
   return true;
@@ -515,9 +518,9 @@ function checkConnectionSync() {
   try {
     const port = getCdpPort();
     if (IS_WINDOWS) {
-      execSync(`powershell -Command "Invoke-WebRequest -Uri 'http://localhost:${port}/json' -UseBasicParsing"`, { stdio: 'pipe', timeout: 2000 });
+      execSync(`powershell -Command "Invoke-WebRequest -Uri 'http://127.0.0.1:${port}/json' -UseBasicParsing"`, { stdio: 'pipe', timeout: 2000 });
     } else {
-      execSync(`curl -s http://localhost:${port}/json > /dev/null`, { stdio: 'pipe', timeout: 2000 });
+      execSync(`curl -s http://127.0.0.1:${port}/json > /dev/null`, { stdio: 'pipe', timeout: 2000 });
     }
     return true;
   } catch {
@@ -569,9 +572,9 @@ if (children.length > 0) {
 }
 
 program
-  .name('figma-ds-cli')
-  .description('CLI for managing Figma design systems')
-  .version(pkg.version);
+  .name('figma-cli-g')
+  .description('Control Figma Desktop from your terminal. No API key required.')
+  .version('1.2.0');
 
 // Default action when no command is given
 program.action(async () => {
@@ -667,42 +670,74 @@ program.action(async () => {
   // Already set up - check connection and show status
   showBanner();
 
-  const connected = await FigmaClient.isConnected();
-  if (connected) {
-    console.log(chalk.green('  ✓ Connected to Figma\n'));
+  // Ensure daemon is running for Safe Mode / Plugin connectivity
+  if (!isDaemonRunning()) {
+    startDaemon();
+    // Wait a moment for it to initialize
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+  }
+
+  const spinner = ora('  Checking connection to Figma...').start();
+  let connected = false;
+  let connectionType = null;
+
+  // Poll for connection (CDP or Plugin via Daemon)
+  for (let i = 0; i < 5; i++) {
+    // 1. Check CDP (Yolo Mode)
+    if (await FigmaClient.isConnected()) {
+      connected = true;
+      connectionType = 'cdp';
+      break;
+    }
+
+    // 2. Check Plugin (Safe Mode) via Daemon Health
     try {
-      const client = new FigmaClient();
-      await client.connect();
-      const info = await client.getPageInfo();
-      console.log(chalk.gray(`  File: ${client.pageTitle.replace(' – Figma', '')}`));
-      console.log(chalk.gray(`  Page: ${info.name}`));
-      client.close();
+      let healthRes;
+      if (IS_WINDOWS) {
+        healthRes = execSync(`powershell -Command "(Invoke-WebRequest -Uri 'http://127.0.0.1:${DAEMON_PORT}/health' -UseBasicParsing).Content"`, { encoding: 'utf8', timeout: 1000 });
+      } else {
+        healthRes = execSync(`curl -s http://127.0.0.1:${DAEMON_PORT}/health`, { encoding: 'utf8', timeout: 1000 });
+      }
+      const health = JSON.parse(healthRes);
+      if (health.plugin) {
+        connected = true;
+        connectionType = 'plugin';
+        break;
+      }
+    } catch (e) { }
+
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  if (connected) {
+    spinner.succeed(chalk.green(`Connected to Figma (${connectionType === 'cdp' ? 'Yolo Mode' : 'Safe Mode'})\n`));
+    try {
+      if (connectionType === 'cdp') {
+        const client = new FigmaClient();
+        await client.connect();
+        const info = await client.getPageInfo();
+        console.log(chalk.gray(`  File: ${client.pageTitle.replace(' – Figma', '')}`));
+        console.log(chalk.gray(`  Page: ${info.name}`));
+        client.close();
+      } else {
+        // Safe Mode info retrieval
+        const healthRes = execSync(IS_WINDOWS
+          ? `powershell -Command "(Invoke-WebRequest -Uri 'http://127.0.0.1:${DAEMON_PORT}/health' -UseBasicParsing).Content"`
+          : `curl -s http://127.0.0.1:${DAEMON_PORT}/health`,
+          { encoding: 'utf8' }
+        );
+        console.log(chalk.gray('  Bridge active. Plugin is communicating with CLI.'));
+      }
     } catch { }
     console.log();
     showQuickStart();
   } else {
-    console.log(chalk.yellow('  ⚠ Figma not connected\n'));
-    console.log(chalk.white('  Starting Figma...'));
-    try {
-      killFigma();
-      await new Promise(r => setTimeout(r, 500));
-      startFigma();
-      console.log(chalk.green('  ✓ Figma started\n'));
-
-      const spinner = ora('  Waiting for connection...').start();
-      for (let i = 0; i < 8; i++) {
-        await new Promise(r => setTimeout(r, 1000));
-        if (await FigmaClient.isConnected()) {
-          spinner.succeed('Connected to Figma\n');
-          showQuickStart();
-          return;
-        }
-      }
-      spinner.warn('Open a file in Figma to connect\n');
-      showQuickStart();
-    } catch {
-      console.log(chalk.gray('  Start manually: ' + getManualStartCommand() + '\n'));
-    }
+    spinner.warn(chalk.yellow('Figma not connected\n'));
+    console.log(chalk.white('  To connect:'));
+    console.log(chalk.gray('  1. Open Figma Desktop'));
+    console.log(chalk.gray('  2. Run the "Figma CLI Connect" plugin'));
+    console.log(chalk.gray('  3. Or run "node src/index.js connect" for Yolo Mode\n'));
+    showQuickStart();
   }
 });
 
@@ -714,7 +749,7 @@ function showQuickStart() {
   console.log(chalk.white('    "Export this frame as PNG"'));
   console.log();
   console.log(chalk.gray('  Tip: See AGENT.md (Antigravity/Gemini) or CLAUDE.md (Claude Code) for all commands.\n'));
-  console.log(chalk.gray('  Learn more: ') + chalk.cyan('https://intodesignsystems.com\n'));
+  console.log(chalk.gray('  for more help contact with me : ') + chalk.cyan('https://www.linkedin.com/in/alnaggar-ux/\n'));
 }
 
 // ============ WELCOME BANNER ============
@@ -828,7 +863,7 @@ program
     console.log(chalk.white('    "Export this frame as PNG"'));
     console.log();
     console.log(chalk.gray('  Tip: See AGENT.md (Antigravity/Gemini) or CLAUDE.md (Claude Code) for all commands.\n'));
-    console.log(chalk.gray('  Learn more: ') + chalk.cyan('https://intodesignsystems.com\n'));
+    console.log(chalk.gray('  for more help contact with me : ') + chalk.cyan('https://www.linkedin.com/in/alnaggar-ux/\n'));
   });
 
 // ============ SETUP (alias for init) ============
@@ -847,14 +882,56 @@ program
   .command('status')
   .description('Check connection to Figma')
   .action(() => {
-    // Check if first run
     const config = loadConfig();
-    if (!config.patched && !checkDependencies(true)) {
-      console.log(chalk.yellow('\n⚠ First time? Run the setup wizard:\n'));
-      console.log(chalk.cyan('  figma-ds-cli init\n'));
-      return;
+    console.log(chalk.cyan('\n  Figma CLI Connection Status\n'));
+
+    // 1. Config Check
+    if (config.patched) {
+      console.log(chalk.green('  ✓ Config: Patched (Yolo Mode enabled)'));
+    } else {
+      console.log(chalk.yellow('  ○ Config: Not Patched (Safe Mode / Plugin only)'));
     }
-    figmaUse('status');
+
+    // 2. Daemon Check
+    const daemonRunning = isDaemonRunning();
+    if (daemonRunning) {
+      console.log(chalk.green('  ✓ Daemon: Running on port ' + DAEMON_PORT));
+
+      // 3. Detailed Health Check
+      try {
+        let healthRes;
+        if (IS_WINDOWS) {
+          healthRes = execSync(`powershell -Command "(Invoke-WebRequest -Uri 'http://127.0.0.1:${DAEMON_PORT}/health' -UseBasicParsing).Content"`, { encoding: 'utf8', timeout: 2000 });
+        } else {
+          healthRes = execSync(`curl -s http://127.0.0.1:${DAEMON_PORT}/health`, { encoding: 'utf8', timeout: 2000 });
+        }
+        const health = JSON.parse(healthRes);
+        if (health.plugin) {
+          console.log(chalk.green('  ✓ Plugin: Connected (Bridge active)'));
+        } else {
+          console.log(chalk.yellow('  ○ Plugin: Waiting for heartbeat (Open Figma CLI Connect plugin)'));
+        }
+        if (health.cdp) {
+          console.log(chalk.green('  ✓ CDP: Connected (Figma Desktop found)'));
+        } else {
+          console.log(chalk.gray('  ○ CDP: Not connected (Yolo Mode inactive)'));
+        }
+      } catch (e) {
+        console.log(chalk.red('  ✗ Health: Could not reach daemon health endpoint'));
+      }
+    } else {
+      console.log(chalk.red('  ✗ Daemon: Not running (Run: node src/index.js start)'));
+    }
+
+    // 4. Figma CDP Port Check
+    const cdpPort = getCdpPort();
+    try {
+      execSync(`powershell -Command "Test-NetConnection -ComputerName 127.0.0.1 -Port ${cdpPort}"`, { stdio: 'pipe' });
+      console.log(chalk.green(`  ✓ Port ${cdpPort}: Open (Figma Debug Port active)`));
+    } catch {
+      console.log(chalk.gray(`  ○ Port ${cdpPort}: Closed (Figma Debug Port inactive)`));
+    }
+    console.log();
   });
 
 // ============ UNPATCH ============
@@ -1659,7 +1736,7 @@ daemon
     }
     console.log(chalk.blue('Reconnecting to Figma...'));
     try {
-      const response = await fetch(`http://localhost:${DAEMON_PORT}/reconnect`);
+      const response = await fetch(`http://127.0.0.1:${DAEMON_PORT}/reconnect`);
       const result = await response.json();
       if (result.error) {
         console.log(chalk.red('✗ Reconnect failed: ' + result.error));
@@ -4418,20 +4495,18 @@ program
         posX = getNextFreeX();
       }
 
-      // Use figma-use render directly - it has full JSX support
-      let cmd = 'npx figma-use render --stdin --json';
-      if (options.parent) cmd += ` --parent "${options.parent}"`;
-      if (posX !== undefined) cmd += ` --x ${posX}`;
-      cmd += ` --y ${posY}`;
+      // Re-apply positioning if needed
+      let finalJsx = jsx;
+      if (posX !== undefined || posY !== undefined || options.parent) {
+        // Add attributes to first tag
+        const attrStr = (options.parent ? ` parent="${options.parent}"` : '') +
+          (posX !== undefined ? ` x={${posX}}` : '') +
+          (posY !== undefined ? ` y={${posY}}` : '');
+        finalJsx = jsx.replace(/^<([a-zA-Z]+)/, `<$1 ${attrStr}`);
+      }
 
-      const output = execSync(cmd, {
-        input: jsx,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 30000
-      });
+      const result = await fastRender(finalJsx);
 
-      const result = JSON.parse(output.trim());
       console.log(chalk.green('✓ Rendered: ' + result.id));
       if (result.name) console.log(chalk.gray('  name: ' + result.name));
     } catch (e) {
@@ -4448,7 +4523,18 @@ program
   .action(async (jsxArrayStr, options) => {
     await checkConnection();
     try {
-      const jsxArray = JSON.parse(jsxArrayStr);
+      let jsxArray;
+      if (jsxArrayStr.endsWith('.json')) {
+        const filePath = isAbsolute(jsxArrayStr) ? jsxArrayStr : join(process.cwd(), jsxArrayStr);
+        if (existsSync(filePath)) {
+          jsxArray = JSON.parse(readFileSync(filePath, 'utf8'));
+        } else {
+          throw new Error(`File not found: ${filePath}`);
+        }
+      } else {
+        jsxArray = JSON.parse(jsxArrayStr);
+      }
+
       if (!Array.isArray(jsxArray)) {
         throw new Error('Argument must be a JSON array of JSX strings');
       }
@@ -4461,30 +4547,17 @@ program
 
       for (const jsx of jsxArray) {
         try {
-          const cmd = `npx figma-use render --stdin --json --x ${currentX} --y ${currentY}`;
-          const output = execSync(cmd, {
-            input: jsx,
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            timeout: 30000
-          });
-
-          const result = JSON.parse(output.trim());
+          const result = await fastRender(jsx, currentX, currentY);
           results.push(result);
           console.log(chalk.green('✓ Rendered: ' + result.id + (result.name ? ' (' + result.name + ')' : '')));
 
-          // Get size of created frame for next position
-          try {
-            if (vertical) {
-              const height = figmaEvalSync(`(async () => { const n = await figma.getNodeByIdAsync('${result.id}'); return n ? n.height : 200; })()`);
-              currentY += (height || 200) + gap;
-            } else {
-              const width = figmaEvalSync(`(async () => { const n = await figma.getNodeByIdAsync('${result.id}'); return n ? n.width : 300; })()`);
-              currentX += (width || 300) + gap;
-            }
-          } catch {
-            if (vertical) currentY += 200 + gap;
-            else currentX += 300 + gap;
+          const height = result.height || 40;
+          const width = result.width || 100;
+
+          if (vertical) {
+            currentY += height + gap;
+          } else {
+            currentX += width + gap;
           }
         } catch (err) {
           console.log(chalk.red('✗ Failed to render: ' + (err.stderr || err.message)));

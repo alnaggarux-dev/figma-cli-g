@@ -22,7 +22,7 @@ export class FigmaClient {
    */
   static async listPages() {
     const port = getCdpPort();
-    const response = await fetch(`http://localhost:${port}/json`);
+    const response = await fetch(`http://127.0.0.1:${port}/json`);
     const pages = await response.json();
     return pages
       .filter(p => p.url && p.url.includes('figma.com'))
@@ -35,7 +35,7 @@ export class FigmaClient {
   static async isConnected() {
     try {
       const port = getCdpPort();
-      const response = await fetch(`http://localhost:${port}/json`);
+      const response = await fetch(`http://127.0.0.1:${port}/json`);
       const pages = await response.json();
       return pages.some(p => p.url && p.url.includes('figma.com'));
     } catch {
@@ -48,7 +48,7 @@ export class FigmaClient {
    */
   async connect(pageTitle = null) {
     const port = getCdpPort();
-    const response = await fetch(`http://localhost:${port}/json`);
+    const response = await fetch(`http://127.0.0.1:${port}/json`);
     const pages = await response.json();
 
     // Find design/file pages (not feed, home, etc.)
@@ -283,17 +283,23 @@ export class FigmaClient {
    * Parse JSX-like syntax to Figma Plugin API code
    */
   parseJSX(jsx) {
+    // If it doesn't start with a Frame, wrap it in one
+    let fullJsx = jsx.trim();
+    if (!fullJsx.toLowerCase().startsWith('<frame')) {
+      fullJsx = `<Frame name="CLI Render" width={400} height={300}>${fullJsx}</Frame>`;
+    }
+
     // Find opening Frame tag
-    const openMatch = jsx.match(/<Frame\s+([^>]*)>/);
+    const openMatch = fullJsx.match(/<Frame\s+([^>]*)>/i);
     if (!openMatch) {
-      throw new Error('Invalid JSX: must start with <Frame>');
+      throw new Error('Invalid JSX: must start with <Frame> or a supported component');
     }
 
     const propsStr = openMatch[1];
     const startIdx = openMatch.index + openMatch[0].length;
 
     // Find matching closing tag by counting open/close tags
-    const children = this.extractContent(jsx.slice(startIdx), 'Frame');
+    const children = this.extractContent(fullJsx.slice(startIdx), 'Frame');
 
     // Parse props
     const props = this.parseProps(propsStr);
@@ -344,13 +350,13 @@ export class FigmaClient {
   parseProps(propsStr) {
     const props = {};
 
-    // Match name="value" or name={value}
-    const regex = /(\w+)=(?:"([^"]*)"|{([^}]*)})/g;
+    // Match name="value", name='value', or name={value}
+    const regex = /(\w+)=(?:"([^"]*)"|'([^']*)'|{([^}]*)})/g;
     let match;
 
     while ((match = regex.exec(propsStr)) !== null) {
       const key = match[1];
-      const value = match[2] !== undefined ? match[2] : match[3];
+      const value = match[2] !== undefined ? match[2] : (match[3] !== undefined ? match[3] : match[4]);
       props[key] = value;
     }
 
@@ -389,7 +395,7 @@ export class FigmaClient {
     }
 
     // Parse Text elements, but skip those inside nested Frames
-    const textRegex = /<Text\s+([^>]*)>([^<]*)<\/Text>/g;
+    const textRegex = /<Text\s+([^>]*)>([^<]*)<\/Text>/gi;
     while ((match = textRegex.exec(childrenStr)) !== null) {
       const idx = match.index;
       // Check if this text is inside a nested frame
@@ -404,7 +410,7 @@ export class FigmaClient {
     }
 
     // Parse Rectangle elements (self-closing)
-    const rectRegex = /<(?:Rectangle|Rect)\s+([^/]*)\s*\/>/g;
+    const rectRegex = /<(?:Rectangle|Rect)\s+([^/]*)\s*\/>/gi;
     while ((match = rectRegex.exec(childrenStr)) !== null) {
       const idx = match.index;
       const insideFrame = frameRanges.some(r => idx >= r.start && idx < r.end);
@@ -514,11 +520,12 @@ export class FigmaClient {
           const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : weight === 'semibold' ? 'Semi Bold' : 'Regular';
           const size = item.size || 14;
           const color = item.color || '#000000';
+          const font = item.font || 'Readex Pro';
           const fillWidth = item.w === 'fill';
 
           return `
         const el${idx} = figma.createText();
-        el${idx}.fontName = {family:'Inter',style:'${style}'};
+        el${idx}.fontName = {family:'${font}',style:'${style}'};
         el${idx}.fontSize = ${size};
         el${idx}.characters = ${JSON.stringify(item.content)};
         el${idx}.fills = [{type:'SOLID',color:${this.hexToRgbCode(color)}}];
@@ -706,7 +713,7 @@ export class FigmaClient {
   }
 
   hexToRgbCode(hex) {
-    return `{r:${parseInt(hex.slice(1,3),16)/255},g:${parseInt(hex.slice(3,5),16)/255},b:${parseInt(hex.slice(5,7),16)/255}}`;
+    return `{r:${parseInt(hex.slice(1, 3), 16) / 255},g:${parseInt(hex.slice(3, 5), 16) / 255},b:${parseInt(hex.slice(5, 7), 16) / 255}}`;
   }
 
   // ============ Node Operations ============

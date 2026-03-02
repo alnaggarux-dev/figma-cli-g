@@ -1,4 +1,4 @@
-# figma-ds-cli Command Reference
+# Figma-cli-g Command Reference
 
 Full command reference for the Figma CLI. For quick start, see CLAUDE.md.
 
