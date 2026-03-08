@@ -1,10 +1,10 @@
 # Architecture
 
-## How figma-ds-cli Works
+## How Figma-CLI-G Works
 
 ```
 ┌─────────────────┐      Chrome DevTools      ┌─────────────────┐
-│  figma-ds-cli   │ ◄────── Protocol ───────► │  Figma Desktop  │
+│   figma-cli-g   │ ◄────── Protocol ───────► │  Figma Desktop  │
 │     (CLI)       │      (localhost:9222)     │                 │
 └─────────────────┘                           └─────────────────┘
 ```
@@ -17,23 +17,31 @@
 
 3. **Figma Plugin API**: We execute JavaScript against the global `figma` object, which provides full access to the Figma Plugin API.
 
+4. **WebSocket Daemon**: A persistent background HTTP/WebSocket server running on port `49428` (`src/daemon.js`) to provide incredibly fast `< 10ms` executions by avoiding repeated DevTools connections.
+
 ### Connection Flow
 
-1. User runs `figma-ds-cli connect`
+1. User runs `figma-cli-g connect`
 2. CLI patches Figma to enable remote debugging (adds `--remote-debugging-port=9222` flag)
 3. Figma restarts with debugging enabled
 4. CLI connects via WebSocket to `localhost:9222`
-5. Commands are executed as JavaScript in Figma's context
+5. The connection daemon starts to keep a constant, low-latency bridge open.
+6. Commands are evaluated as JavaScript tightly bound within Figma's Context.
 
-### Key Files
+### Key Directories & Files
 
 ```
-figma-cli/
+figma-cli-g/
 ├── src/
-│   └── index.js      # Main CLI entry point, all commands
-├── package.json      # npm package config
-├── README.md         # User documentation
-└── docs/             # Technical documentation
+│   ├── index.js          # Main CLI entry point (commander)
+│   ├── figma-client.js   # Heavy lifting figma interactions and CDP connections
+│   ├── daemon.js         # The background acceleration HTTP/WS server
+│   ├── figma-patch.js    # Local patching tools (Yolo mode)
+│   └── figjam-client.js  # FigJam specific commands
+├── docs/                 # Documentation (API, Commands, Architecture, Setup)
+├── plugin/               # Safe-mode visual plugin bridging
+├── test/                 # Test suites (unit/integration)
+└── package.json          # npm configuration mapping `figma-cli-g`
 ```
 
 ### No API Key Required
@@ -43,11 +51,10 @@ Unlike the Figma REST API which requires authentication, we use the Plugin API d
 - Full read/write access to everything
 - No rate limits
 - Access to features not available in REST API (like variable modes)
-- Works with the user's existing Figma session
+- Works with the user's existing Figma session directly on canvas
 
 ### Limitations
-
-- macOS only (for now)
-- Requires Figma Desktop (not web)
-- One Figma instance at a time
-- Some eval commands don't return output (but still execute)
+- Windowns native & macOS.
+- Designed to drive Figma Desktop, not web.
+- Requires one Figma instance at a time to determine correct WebSocket targets.
+- Some complex structural manipulations require specific scaling and bounding boxes adjustments.

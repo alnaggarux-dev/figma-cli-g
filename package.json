@@ -1,15 +1,16 @@
 {
   "name": "figma-cli-g",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "CLI for Figma design systems. Works on Windows & macOS with any AI CLI (Antigravity, Claude Code, Cursor, Copilot). No API key required.",
-  "author": "Sil Bormüller",
+  "author": "Alnaggar UX <https://www.linkedin.com/in/alnaggar-ux/>",
   "license": "MIT",
   "type": "module",
   "bin": {
     "figma-cli-g": "src/index.js"
   },
   "files": [
-    "src"
+    "src",
+    "plugin"
   ],
   "keywords": [
     "figma",
@@ -21,15 +22,17 @@
     "cross-platform",
     "ai-cli",
     "antigravity",
-    "claude-code"
+    "gemini",
+    "cursor",
+    "copilot"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/silships/figma-cli.git"
+    "url": "git+https://github.com/alnaggarux-dev/figma-cli-g.git"
   },
   "homepage": "https://www.linkedin.com/in/alnaggar-ux/",
   "bugs": {
-    "url": "https://github.com/silships/figma-cli/issues"
+    "url": "https://github.com/alnaggarux-dev/figma-cli-g/issues"
   },
   "engines": {
     "node": ">=18"

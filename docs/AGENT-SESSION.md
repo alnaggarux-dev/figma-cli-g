@@ -1,14 +1,14 @@
-# Claude Session Quick Reference
+# Figma-CLI-G Agent Session Quick Reference
 
 ## Project Overview
 
-`figma-ds-cli` is a CLI tool for managing Figma design systems. It connects to Figma Desktop via Chrome DevTools Protocol and executes JavaScript against the Figma Plugin API.
+`figma-cli-g` is a CLI tool for managing Figma design systems. It connects to Figma Desktop via Chrome DevTools Protocol and executes JavaScript against the Figma Plugin API.
 
 **Location:** `/Users/sil/claude/figma-cli`
-**npm package:** `figma-ds-cli` (v1.1.0)
+**npm package:** `figma-cli-g` (v1.2.0)
 **GitHub:** https://github.com/silships/figma-cli
 
-## Key Commands for Claude
+## Key Commands for AI Agents
 
 ### Execute JavaScript in Figma
 
@@ -16,18 +16,18 @@
 node src/index.js eval "YOUR_JAVASCRIPT_HERE"
 ```
 
-### Query Nodes
+### Fast Variable Render Syntax
 
 ```bash
-node src/index.js raw query "//FRAME"
-node src/index.js raw query "//GROUP[@name='content']"
-node src/index.js raw query "//*[@name^='session-']"
+node src/index.js render '<Frame name="Card" bg="var:card" w={320} h={320} p={24} rounded={16} flex="col" gap={16}>
+  <Text color="var:foreground" size={24} weight="bold">Header Component</Text>
+</Frame>'
 ```
 
 ### Export
 
 ```bash
-node src/index.js raw export "NODE_ID" --scale 2 --suffix "_dark"
+node src/index.js node "NODE_ID" --format png --scale 2 -o "output.png"
 ```
 
 ## FigJam Commands
@@ -132,38 +132,21 @@ page.children.filter(n => n.name.startsWith('Stream-')).forEach((f, i) => {
 ## Important Notes
 
 1. **Eval often returns no output** but code still executes. Verify with queries.
-
-2. **Use rescale() not resize()** for scaling. resize() can break layers.
-
+2. **Use `jsx` rendering frames over rigid node manipulations**, it builds proper auto-layouts directly on the canvas.
 3. **Library variables** cannot be accessed via `getLocalVariableCollections()`. Must find through `boundVariables` on nodes.
-
-4. **Node IDs** are in format `PAGE:NODE` like `1:92`. Get them from query output.
-
-5. **Working directory** must be `/Users/sil/claude/figma-cli` to run commands.
+4. **Agent File Structure** is guided strictly by `AGENT.md`.
 
 ## File Structure
 
 ```
-figma-cli/
-├── src/index.js     # Main CLI, all commands
+figma-cli-g/
+├── src/             # Source files (index.js, figma-client.js, daemon.js)
 ├── package.json     # npm config
 ├── README.md        # User docs
+├── AGENT.md         # AI Agent directives
 └── docs/
-    ├── ARCHITECTURE.md   # How it works
-    ├── COMMANDS.md       # All commands
-    ├── TECHNIQUES.md     # Advanced patterns
-    └── CLAUDE-SESSION.md # This file
+    ├── ARCHITECTURE.md   # Structure overview
+    ├── COMMANDS.md       # Full command docs
+    ├── setup.md          # Setup guides
+    └── what-we-did.md    # Changelogs of the implementation
 ```
-
-## Current Session Context
-
-Content group IDs (may change per file):
-```
-1:92, 1:112, 1:134, 1:154, 1:179, 1:200, 1:223, 1:244, 1:269, 1:297, 1:315, 1:332, 1:355, 1:381, 1:405
-```
-
-These are inside session-1 through session-15 frames (1920×1080).
-
-Variable collection: "Mode (Alias)" from library "IDS_Tokens"
-- Light Mode
-- Dark Mode

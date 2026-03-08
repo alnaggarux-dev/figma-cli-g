@@ -1,0 +1,291 @@
+# Figma-CLI-G — Full Code Review & Improvement Roadmap
+
+> **Goal:** Connect to Figma fast using free AI models with clear logic, clear workflow, and build complex design systems + components fast and easy without hallucinations.
+
+---
+
+## 🔴 Critical Bugs Found (Connection Failures)
+
+These are the **root causes** of why the AI couldn't connect to Figma in your [logs](file:///d:/Design/AI/Project-ongoing/Figma-CLI-G/figma-cli-g/logs/Connecting-logs.txt):
+
+### Bug 1: `curl` used everywhere — doesn't exist on Windows
+**Severity:** 🔴 BLOCKING — kills ALL connection logic on Windows
+
+The codebase uses `curl` in **9 places** inside [src/index.js](file:///d:/Design/AI/Project-ongoing/Figma-CLI-G/figma-cli-g/src/index.js) for daemon health checks, command execution, and connection validation. `curl` is a Unix tool — it does **not** exist on most Windows PowerShell/CMD environments natively.
+
+| Line | Function | What breaks |
+|------|----------|-------------|
+| L46 | [isDaemonRunning()](file:///d:/Design/AI/Project-ongoing/Figma-CLI-G/figma-cli-g/src/index.js#41-56) | Daemon health check fails silently → returns `false` |
+| L288 | [figmaEvalSync()](file:///d:/Design/AI/Project-ongoing/Figma-CLI-G/figma-cli-g/src/index.js#270-350) | All sync evaluations fail → commands don't execute |
+| L303 | [figmaEvalSync()](file:///d:/Design/AI/Project-ongoing/Figma-CLI-G/figma-cli-g/src/index.js#270-350) | Safe mode health fallback fails |
+| L374 | [figmaUse('status')](file:///d:/Design/AI/Project-ongoing/Figma-CLI-G/figma-cli-g/src/index.js#351-443) | Status check broken |
+| L450 | [checkConnection()](file:///d:/Design/AI/Project-ongoing/Figma-CLI-G/figma-cli-g/src/index.js#444-468) | Connection check always fails → "Not connected" |
+| L475 | [checkConnectionSync()](file:///d:/Design/AI/Project-ongoing/Figma-CLI-G/figma-cli-g/src/index.js#469-495) | Same as above, sync version |
+| L485 | [checkConnectionSync()](file:///d:/Design/AI/Project-ongoing/Figma-CLI-G/figma-cli-g/src/index.js#469-495) | CDP direct check fails |
+| L981 | connect `--safe` | Safe mode plugin health check fails |
+
+**Fix:** Replace ALL `curl` calls with Node.js native `fetch()` (available since Node 18+) or `http.request()`.
+
+### Bug 2: `/tmp/` hardcoded paths — Windows doesn't have `/tmp/`
+**Severity:** 🔴 BLOCKING — crashes file-based eval fallback
+
+| Line | What breaks |
+|------|-------------|
+| L283 | `figmaEvalSync` payload file writes to `/tmp/` |
+| L315-316 | Fallback eval script + result files written to `/tmp/` |
+| L2862 | Screenshot temp file |
+| L3000, L3006 | URL analysis scripts |
+| L3164 | Recreate URL scripts |
+| L3416 | Remove-bg temp file |
+
+**Fix:** Replace `/tmp/` with `os.tmpdir()` (already imported but not used for these paths).
+
+### Bug 3: `sleep 0.3` Unix command in `startDaemon()`
+**Severity:** 🟡 HIGH — daemon restart fails on Windows
+
+Line 128: `execSync('sleep 0.3', { stdio: 'pipe' })` — `sleep` is a Unix command.
+
+**Fix:** Use `Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300)` or `setTimeout`.
+
+### Bug 4: `lsof` used in `stopDaemon()`
+**Severity:** 🟡 HIGH — daemon port cleanup fails on Windows
+
+Line 161: `execSync('lsof -ti:${DAEMON_PORT} | xargs kill -9 ...')` — Unix only.
+
+**Fix:** Use `netstat -ano | findstr :PORT` + `taskkill /PID` on Windows, wrapped in platform check.
+
+### Bug 5: `rm -f` used in `figmaEvalSync()` fallback
+**Severity:** 🟡 MEDIUM — temp file cleanup fails silently
+
+Line 340, 345: `execSync('rm -f ${tempFile} ${resultFile}')` — Unix only.
+
+**Fix:** Use `fs.unlinkSync()` (already imported).
+
+### Bug 6: Daemon port `EADDRINUSE` crash
+**Severity:** 🟡 HIGH — logs show daemon crashes when port 3456 is occupied
+
+The daemon in `src/daemon.js` line 406 calls `httpServer.listen()` without handling `EADDRINUSE`. If a previous daemon didn't shut down cleanly, the new one crashes immediately.
+
+**Fix:** Add port-in-use detection + auto-kill previous process before binding.
+
+### Bug 7: `taskkill /F /PID` fails from PowerShell
+**Severity:** 🟡 HIGH — AI agent literally couldn't kill processes (visible in logs)
+
+The logs show `ERROR: Invalid argument/option - 'F:/'` repeated 6+ times. This happens because PowerShell interprets `/F` as a path. The code at line 201 uses `taskkill /IM Figma.exe /F` which works, but AI agents calling `taskkill /F /PID` from PowerShell fail.
+
+**Fix:** Use `Stop-Process -Id PID -Force` for PowerShell, or wrap in `cmd /c "taskkill /F /PID X"`.
+
+---
+
+## 🟠 Old Author / Branding Issues (Fixed)
+
+✅ **`package.json`** — Fixed: author, repo URL, bugs URL now point to `alnaggarux-dev/figma-cli-g`
+✅ **`package-lock.json`** — Regenerated with correct metadata
+
+### Still remaining in source code:
+
+| Location | Old reference | What to change |
+|----------|--------------|----------------|
+| `index.js` L757 | `by Sil Bormüller • intodesignsystems.com` | Update banner credits |
+| `index.js` L742 | `https://intodesignsystems.com` | Update link |
+| `index.js` L736 | `Just ask Claude:` | Change to `Just ask your AI:` |
+| `index.js` L849 | `Just ask Claude:` (init wizard) | Change to `Just ask your AI:` |
+| `index.js` L929-930 | `Hey designer!` / `Sil · intodesignsystems.com` | Update credits |
+| `index.js` L598 | `.name('figma-ds-cli')` | Change to `figma-cli-g` |
+| `index.js` L865 | `execSync('figma-ds-cli init')` | Change to proper call |
+| `index.js` L462-463 | `figma-ds-cli connect` | Update help text |
+| `index.js` L490-491 | `figma-ds-cli connect` | Update help text |
+
+---
+
+## 🟢 Improvement Roadmap (Prioritized Phases)
+
+### Phase 1: Make Connection Actually Work on Windows 🔴
+**Priority:** CRITICAL — without this, nothing works
+**Estimated effort:** 2–3 hours
+
+```
+1.1  Replace ALL curl calls with native fetch()
+     - isDaemonRunning() → use fetch() with AbortSignal.timeout
+     - figmaEvalSync() → use fetch() POST instead of curl -d @file
+     - checkConnection() → use fetch()
+     - checkConnectionSync() → use fetch() wrapped in sync helper
+     - figmaUse('status') → use fetch()
+
+1.2  Replace ALL /tmp/ paths with os.tmpdir()
+     - import { tmpdir } from 'os' (already have it)
+     - const TEMP_DIR = tmpdir()
+     - Replace every '/tmp/figma-*' with join(TEMP_DIR, 'figma-*')
+
+1.3  Replace Unix shell commands
+     - sleep 0.3 → Atomics.wait or setTimeout
+     - lsof → platform-aware port checking
+     - rm -f → fs.unlinkSync()
+
+1.4  Fix daemon EADDRINUSE crash
+     - Try to connect to existing daemon first
+     - If occupied by old daemon, kill it
+     - Add graceful retry with exponential backoff
+
+1.5  Fix taskkill for PowerShell
+     - Use Stop-Process on Windows
+     - Or wrap in cmd /c for consistent behavior
+```
+
+### Phase 2: Clean Code & AI-Friendly Architecture 🟠
+**Priority:** HIGH — makes free AI models work without hallucination
+**Estimated effort:** 4–6 hours
+
+The core problem for free AI models: **`index.js` is 5,473 lines long**. No free AI model (Gemini Flash, GPT-4o-mini, Claude Haiku) can process 215KB in one context window without hallucinating.
+
+```
+2.1  Extract color palettes into data files
+     - src/data/shadcn-colors.js (primitives + semantic)
+     - src/data/tailwind-colors.js
+     - src/data/ids-colors.js
+     These are pure data dictionaries, no logic needed.
+
+2.2  Extract command groups into separate modules
+     - src/commands/connect.js      (connect, init, setup, status)
+     - src/commands/tokens.js       (tokens preset, tokens tailwind, tokens ds)
+     - src/commands/variables.js    (var list, var delete-all, var visualize)
+     - src/commands/create.js       (create rect, circle, text, frame, etc.)
+     - src/commands/render.js       (render, render-batch)
+     - src/commands/export.js       (export png, svg, css)
+     - src/commands/node-ops.js     (node tree, to-component, delete)
+     - src/commands/analyze.js      (analyze colors, typography, spacing)
+
+2.3  Extract connection helpers into src/connection.js
+     - isDaemonRunning()
+     - daemonExec()
+     - fastEval() / fastRender()
+     - figmaEvalSync()
+     - checkConnection()
+     - startDaemon() / stopDaemon()
+
+2.4  Extract utility functions into src/utils/
+     - src/utils/color.js           (hexToRgb, generateFillCode, etc.)
+     - src/utils/platform.js        (IS_WINDOWS, getFigmaPath, killFigma, etc.)
+     - src/utils/config.js          (loadConfig, saveConfig)
+
+2.5  Slim down index.js to ~200 lines
+     - Only import modules and register commands
+     - AI agents only need to read the relevant module file
+```
+
+**Result:** Each file < 200 lines. Free AI models can read ONE file and execute commands perfectly.
+
+### Phase 3: Bulletproof Connection Flow 🟡
+**Priority:** MEDIUM — reduces "it doesn't connect" to near zero
+**Estimated effort:** 2–3 hours
+
+```
+3.1  Smart connection diagnostics
+     - Auto-detect if Figma is running (process check)
+     - Auto-detect if port 9222 is open (TCP probe)
+     - Auto-detect if a file is open (CDP /json check)
+     - Clear step-by-step error messages for each failure point
+
+3.2  Auto-retry with backoff
+     - Connection attempt: try 3x with 2s, 4s, 8s delays
+     - Each retry logs what it's doing clearly
+     - Final failure gives copy-paste manual fix command
+
+3.3  Connection state file
+     - Save connection state to ~/.figma-cli-g/state.json
+     - { connected: true, mode: 'yolo', port: 9222, timestamp: ... }
+     - Quick startup: check state file before full probe
+     - Stale detection: if state > 5min old, re-probe
+
+3.4  Health endpoint improvement
+     - Add /health response caching in daemon
+     - Add file name + page name to health response
+     - AI agents can quickly verify "am I connected to the right file?"
+```
+
+### Phase 4: AI-Optimized Workflow Layer 🟢
+**Priority:** MEDIUM — makes free models 10x more effective
+**Estimated effort:** 3–4 hours
+
+```
+4.1  Create COMMANDS.json machine-readable index
+     - Every command with: name, args, description, example
+     - AI loads this ONE file to know all available commands
+     - No need to parse 5000+ lines of JS
+
+4.2  Error response standardization
+     - Every error returns: { error: true, code: "NOT_CONNECTED", 
+       message: "...", fix: "run: node src/index.js connect" }
+     - AI agents can auto-recover from errors
+
+4.3  Workflow presets (compound commands)
+     - "setup-design-system" = tokens preset shadcn + var visualize
+     - "create-component-set" = render-batch + to-component + bind
+     - Single command runs entire workflow
+
+4.4  Dry-run mode
+     - --dry-run flag on any command
+     - Returns what WOULD happen without executing
+     - AI agents can verify before committing
+```
+
+### Phase 5: Design System Intelligence 🔵
+**Priority:** LOW — differentiates the product
+**Estimated effort:** 4–6 hours
+
+```
+5.1  Component templates library
+     - templates/card.figma.jsx
+     - templates/button.figma.jsx
+     - templates/input.figma.jsx
+     - Pre-built, tested, variable-bound templates
+
+5.2  Design system presets beyond shadcn
+     - Material Design 3 tokens
+     - Ant Design tokens
+     - Custom token import from CSS/JSON
+
+5.3  Auto-component detection
+     - "Analyze canvas and suggest components"
+     - Find repeated patterns → suggest componentization
+     - Use Figma's cluster analysis
+```
+
+---
+
+## 📊 Priority Matrix
+
+| Phase | Impact | Effort | Priority |
+|-------|--------|--------|----------|
+| **Phase 1: Fix Windows Connection** | 🔴 Critical | 2-3h | **DO FIRST** |
+| **Phase 2: Split Giant Files** | 🟠 High | 4-6h | **DO SECOND** |
+| **Phase 3: Bulletproof Connection** | 🟡 Medium | 2-3h | Third |
+| **Phase 4: AI Workflow Layer** | 🟢 Medium | 3-4h | Fourth |
+| **Phase 5: Design Intelligence** | 🔵 Low | 4-6h | Fifth |
+
+---
+
+## 📝 Quick Wins (Can Fix Right Now)
+
+| # | Fix | Lines | Time |
+|---|-----|-------|------|
+| 1 | Replace `curl` in `isDaemonRunning()` with `fetch()` | L42-55 | 5 min |
+| 2 | Replace `/tmp/` with `tmpdir()` in `figmaEvalSync()` | L283, L315-316 | 5 min |
+| 3 | Fix `sleep 0.3` in `startDaemon()` | L128 | 2 min |
+| 4 | Fix `lsof` in `stopDaemon()` | L160-162 | 5 min |
+| 5 | Update "Just ask Claude" → "Just ask your AI" | L736, L849 | 2 min |
+| 6 | Update banner credits | L757, L929-930 | 2 min |
+| 7 | Fix `figma-ds-cli` → `figma-cli-g` in program name | L598 | 1 min |
+
+**Total quick wins: ~22 minutes** to fix the most critical connection blockers.
+
+---
+
+## 🎯 Success Criteria
+
+After completing Phase 1 + Phase 2:
+- ✅ `node src/index.js connect` works on Windows first try
+- ✅ Any free AI model (Gemini Flash, GPT-4o-mini) can read individual command files
+- ✅ No hallucination — each module is < 200 lines with clear single purpose
+- ✅ Connection failures give clear, actionable error messages
+- ✅ Design system creation works end-to-end in < 30 seconds
